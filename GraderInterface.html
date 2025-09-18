@@ -1,0 +1,276 @@
+<!--
+IGCSE Short-Answer Grader - Teacher Web Interface (single-file HTML)
+
+This is a frontend-only prototype. It expects a simple backend (Flask or FastAPI) with these endpoints:
+
+POST /api/add_question          -> JSON { qid, question, points: [..], max_marks }
+POST /api/add_student           -> JSON { id, qid, answer }
+POST /api/add_teacher_label     -> JSON { student_id, qid, teacher_mark }
+POST /api/upload_scans          -> multipart/form-data files[]=... returns JSON { uploaded: [{filename, id}], ocr_results: [{id,text}] }
+GET  /api/grade                 -> returns JSON list of grading results (same as main.py grade output)
+GET  /api/evaluate              -> returns JSON evaluation results (same as main.py evaluate output)
+
+The backend should handle OCR for uploaded scanned handwritten answers (e.g., using Tesseract or a cloud OCR service) and append recognized text to student_answers.json with generated IDs.
+
+Save this file as IGCSE_Grader_Interface.html and open in a browser. For testing without a backend, you can use the "Mock Mode" toggle to simulate responses.
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IGCSE Short-Answer Grader - Teacher Interface</title>
+  <style>
+    body{font-family:Inter,Segoe UI,Roboto,Arial;margin:0;background:#f4f6f8;color:#1f2937}
+    header{background:#0f172a;color:#fff;padding:18px 24px}
+    .container{max-width:1000px;margin:20px auto;padding:18px;background:#fff;border-radius:10px;box-shadow:0 6px 20px rgba(15,23,42,0.06)}
+    h1{margin:0;font-size:20px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    label{display:block;margin-top:8px;font-weight:600}
+    input[type=text],textarea,select{width:100%;padding:8px;margin-top:6px;border:1px solid #d1d5db;border-radius:6px}
+    button{background:#0f172a;color:#fff;border:none;padding:10px 14px;border-radius:8px;cursor:pointer}
+    .secondary{background:#374151}
+    .muted{color:#6b7280}
+    .panel{padding:12px;border-radius:8px;border:1px dashed #e5e7eb;background:#fbfbfc}
+    .uploads{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .thumb{width:120px;height:80px;border-radius:6px;overflow:hidden;border:1px solid #e6eef8;display:flex;align-items:center;justify-content:center;background:#fff}
+    pre{background:#0b1220;color:#e6eef8;padding:12px;border-radius:6px;overflow:auto}
+    .small{font-size:13px}
+    .full{grid-column:1 / -1}
+    .row{display:flex;gap:8px}
+    .notice{background:#fffbeb;border:1px solid #fef3c7;padding:10px;border-radius:6px;color:#92400e}
+    .success{background:#ecfdf5;border:1px solid #bbf7d0;padding:10px;border-radius:6px;color:#065f46}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container"><h1>IGCSE Short-Answer Grader — Teacher Interface</h1></div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <div class="panel">
+        <h3>Add Question (Model Answer)</h3>
+        <label>Question ID</label>
+        <input id="qid" type="text" placeholder="e.g., q10" />
+        <label>Question Text</label>
+        <textarea id="qtext" rows="3" placeholder="Paste the question text"></textarea>
+        <label>Max Marks</label>
+        <input id="qmarks" type="text" value="2" />
+        <label>Mark Points (one per line)</label>
+        <textarea id="qpoints" rows="4" placeholder="Each line is one marking point"></textarea>
+        <div style="margin-top:10px" class="row">
+          <button onclick="addQuestion()">Add Question</button>
+          <button class="secondary" onclick="clearQuestionForm()">Clear</button>
+        </div>
+        <p class="muted small">This will post to <code>/api/add_question</code> (backend required).</p>
+        <div id="qmsg"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Add Student Answer</h3>
+        <label>Student ID</label>
+        <input id="sid" type="text" placeholder="e.g., s10" />
+        <label>Question ID</label>
+        <input id="sid_qid" type="text" placeholder="e.g., q1" />
+        <label>Answer Text</label>
+        <textarea id="sanswer" rows="5" placeholder="Paste student's typed or OCR text here"></textarea>
+        <div style="margin-top:10px" class="row">
+          <button onclick="addStudent()">Add Student Answer</button>
+          <button class="secondary" onclick="clearStudentForm()">Clear</button>
+        </div>
+        <p class="muted small">This will post to <code>/api/add_student</code>.</p>
+        <div id="smsg"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Upload Scanned Handwritten Answers</h3>
+        <p class="muted small">Select one or more scanned answer images (jpg/png). The backend should run OCR and return recognized text.</p>
+        <input id="scanFiles" type="file" accept="image/*" multiple />
+        <div style="margin-top:10px" class="row">
+          <button onclick="uploadScans()">Upload & OCR</button>
+          <button class="secondary" onclick="clearUploads()">Clear</button>
+        </div>
+        <div id="uploads" class="uploads"></div>
+        <div id="ocrResults"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Teacher Labels</h3>
+        <label>Student ID</label>
+        <input id="t_sid" type="text" />
+        <label>Question ID</label>
+        <input id="t_qid" type="text" />
+        <label>Teacher Mark</label>
+        <input id="t_mark" type="number" />
+        <div style="margin-top:10px" class="row">
+          <button onclick="addTeacherLabel()">Add Teacher Label</button>
+          <button class="secondary" onclick="clearTeacherForm()">Clear</button>
+        </div>
+        <div id="tmsg"></div>
+      </div>
+
+      <div class="panel full">
+        <h3>Run Grading & Evaluation</h3>
+        <div class="row">
+          <button onclick="runGrade()">Run Grading (AI)</button>
+          <button class="secondary" onclick="runEvaluate()">Run Evaluation (AI vs Teacher)</button>
+          <label style="margin-left:10px"><input id="mockMode" type="checkbox" /> Mock Mode</label>
+        </div>
+        <p class="muted small">Grading results will be downloaded as CSV.</p>
+        <div id="runOutput" style="margin-top:8px"></div>
+      </div>
+
+      <div class="panel full">
+        <h3>Recent Activity & Logs</h3>
+        <pre id="logs">Ready.</pre>
+      </div>
+    </div>
+  </main>
+
+<script>
+const API_ROOT = '/api'; // change if backend prefix differs
+
+function log(msg){
+  const el = document.getElementById('logs');
+  el.textContent = msg + '\n' + el.textContent;
+}
+
+function clearQuestionForm(){
+  document.getElementById('qid').value='';
+  document.getElementById('qtext').value='';
+  document.getElementById('qmarks').value='';
+  document.getElementById('qpoints').value='';
+  document.getElementById('qmsg').innerHTML='';
+}
+
+async function addQuestion(){
+  const qid = document.getElementById('qid').value.trim();
+  const qtext = document.getElementById('qtext').value.trim();
+  const max_marks = parseInt(document.getElementById('qmarks').value||'0');
+  const points = document.getElementById('qpoints').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!qid||!qtext||!points.length){ alert('Please enter qid, question text and at least one point'); return; }
+  const payload = { qid, question: qtext, points, max_marks };
+  document.getElementById('qmsg').innerHTML = 'Submitting...';
+  try{
+    if(document.getElementById('mockMode').checked){
+      document.getElementById('qmsg').innerHTML = 'Mock: Question added locally.';
+      log('Mock add question '+qid);
+      return;
+    }
+    const res = await fetch(`${API_ROOT}/add_question`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const data = await res.json();
+    document.getElementById('qmsg').innerHTML = data.message || 'Question added';
+    log('Added question '+qid);
+  }catch(e){ console.error(e); document.getElementById('qmsg').innerHTML = 'Error: '+e.message; }
+}
+
+function clearStudentForm(){ document.getElementById('sid').value=''; document.getElementById('sid_qid').value=''; document.getElementById('sanswer').value=''; document.getElementById('smsg').innerHTML=''; }
+async function addStudent(){
+  const id = document.getElementById('sid').value.trim();
+  const qid = document.getElementById('sid_qid').value.trim();
+  const answer = document.getElementById('sanswer').value.trim();
+  if(!id||!qid||!answer){ alert('Please enter student id, qid and answer'); return; }
+  const payload = { id, qid, answer };
+  document.getElementById('smsg').innerHTML='Submitting...';
+  try{
+    if(document.getElementById('mockMode').checked){ document.getElementById('smsg').innerHTML='Mock: student answer recorded.'; log('Mock add student '+id); return; }
+    const res = await fetch(`${API_ROOT}/add_student`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data = await res.json(); document.getElementById('smsg').innerHTML = data.message || 'Student answer added'; log('Added student '+id);
+  }catch(e){ document.getElementById('smsg').innerHTML='Error: '+e.message; }
+}
+
+function clearTeacherForm(){ document.getElementById('t_sid').value=''; document.getElementById('t_qid').value=''; document.getElementById('t_mark').value=''; document.getElementById('tmsg').innerHTML=''; }
+async function addTeacherLabel(){
+  const student_id = document.getElementById('t_sid').value.trim();
+  const qid = document.getElementById('t_qid').value.trim();
+  const teacher_mark = parseInt(document.getElementById('t_mark').value||'0');
+  if(!student_id||!qid){ alert('Enter student id and qid'); return; }
+  const payload = { student_id, qid, teacher_mark };
+  document.getElementById('tmsg').innerHTML='Submitting...';
+  try{
+    if(document.getElementById('mockMode').checked){ document.getElementById('tmsg').innerHTML='Mock: teacher label saved.'; log('Mock teacher label '+student_id); return; }
+    const res = await fetch(`${API_ROOT}/add_teacher_label`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data = await res.json(); document.getElementById('tmsg').innerHTML = data.message || 'Teacher label added'; log('Added teacher label '+student_id);
+  }catch(e){ document.getElementById('tmsg').innerHTML='Error: '+e.message; }
+}
+
+function clearUploads(){ document.getElementById('scanFiles').value=''; document.getElementById('uploads').innerHTML=''; document.getElementById('ocrResults').innerHTML=''; }
+
+async function uploadScans(){
+  const files = document.getElementById('scanFiles').files;
+  if(!files.length){ alert('Please select files'); return; }
+  const fd = new FormData();
+  for(let i=0;i<files.length;i++) fd.append('files[]', files[i]);
+  document.getElementById('ocrResults').innerHTML='Uploading...';
+  try{
+    if(document.getElementById('mockMode').checked){
+      // Mock: show previews and fake OCR
+      const uploads = document.getElementById('uploads'); uploads.innerHTML='';
+      for(let i=0;i<files.length;i++){ const url = URL.createObjectURL(files[i]); uploads.innerHTML += `<div class="thumb"><img src="${url}" style="max-width:100%;max-height:100%"/></div>`; }
+      document.getElementById('ocrResults').innerHTML = `<div class="success">Mock OCR complete. Recognised text: Example answer text.</div>`;
+      log('Mock OCR upload '+files.length+' files');
+      return;
+    }
+    const res = await fetch(`${API_ROOT}/upload_scans`, { method:'POST', body:fd });
+    const data = await res.json();
+    // show previews
+    const uploads = document.getElementById('uploads'); uploads.innerHTML='';
+    if(data.uploaded){ data.uploaded.forEach(u=>{ const el = document.createElement('div'); el.className='thumb'; el.innerHTML = `<img src="${u.url || u.filename}" style="max-width:100%;max-height:100%"/>`; uploads.appendChild(el); }); }
+    if(data.ocr_results){
+      const out = document.getElementById('ocrResults'); out.innerHTML = '';
+      data.ocr_results.forEach(r=>{ const p = document.createElement('div'); p.className='panel'; p.innerHTML = `<strong>${r.id}</strong><pre>${r.text}</pre>`; out.appendChild(p); });
+    }
+    log('Uploaded scans: '+(data.uploaded?data.uploaded.length:files.length));
+  }catch(e){ document.getElementById('ocrResults').innerHTML='Error: '+e.message; }
+}
+
+async function runGrade(){
+  document.getElementById('runOutput').innerHTML='Running grading...';
+  try{
+    if(document.getElementById('mockMode').checked){
+      const csv = 'student_id,qid,answer,awarded,max_marks\ns1,q1,Example answer,2,3\n';
+      downloadFile(csv, 'grading_results.csv', 'text/csv');
+      document.getElementById('runOutput').innerHTML='Mock grading complete. CSV downloaded.'; log('Mock grading'); return;
+    }
+    const res = await fetch(`${API_ROOT}/grade`);
+    if(!res.ok) throw new Error('Server error '+res.status);
+    const data = await res.json();
+    // convert to CSV and download
+    const csv = jsonToCsv(data);
+    downloadFile(csv, 'grading_results.csv', 'text/csv');
+    document.getElementById('runOutput').innerHTML='Grading complete. CSV downloaded.'; log('Grading finished');
+  }catch(e){ document.getElementById('runOutput').innerHTML='Error: '+e.message; }
+}
+
+async function runEvaluate(){
+  document.getElementById('runOutput').innerHTML='Running evaluation...';
+  try{
+    if(document.getElementById('mockMode').checked){
+      const csv = 'student_id,qid,awarded,teacher\ns1,q1,2,2\n'; downloadFile(csv,'evaluation_results.csv','text/csv'); document.getElementById('runOutput').innerHTML='Mock evaluation complete. CSV downloaded.'; log('Mock evaluation'); return; }
+    const res = await fetch(`${API_ROOT}/evaluate`);
+    if(!res.ok) throw new Error('Server error '+res.status);
+    const data = await res.json();
+    const csv = jsonToCsv(data);
+    downloadFile(csv,'evaluation_results.csv','text/csv');
+    document.getElementById('runOutput').innerHTML='Evaluation complete. CSV downloaded.'; log('Evaluation finished');
+  }catch(e){ document.getElementById('runOutput').innerHTML='Error: '+e.message; }
+}
+
+function jsonToCsv(items){
+  if(!items || !items.length) return '';
+  const keys = Object.keys(items[0]);
+  const lines = [keys.join(',')];
+  items.forEach(it => { const row = keys.map(k => '"'+String((it[k]===undefined||it[k]===null)?'': (typeof it[k]==='object'?JSON.stringify(it[k]).replace(/"/g,'""'):String(it[k]).replace(/"/g,'""'))) + '"'); lines.push(row.join(',')); });
+  return lines.join('\n');
+}
+
+function downloadFile(content, filename, mime){
+  const blob = new Blob([content], {type: mime||'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
