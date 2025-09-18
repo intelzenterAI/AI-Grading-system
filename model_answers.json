@@ -1,0 +1,20 @@
+{
+  "q1": {
+    "question": "Explain what a compiler does.",
+    "points": [
+      "Translates high-level code to machine code",
+      "Checks syntax and reports errors",
+      "Optimizes code for performance"
+    ],
+    "max_marks": 3
+  },
+  "q2": {
+    "question": "Describe two differences between RAM and ROM.",
+    "points": [
+      "RAM is volatile memory and loses data when power is off",
+      "ROM is non-volatile and retains data without power",
+      "RAM can be read/write while ROM is mainly read-only"
+    ],
+    "max_marks": 3
+  }
+}
