@@ -1,0 +1,22 @@
+[
+  {
+    "id": "s1",
+    "qid": "q1",
+    "answer": "A compiler converts high level programming code into machine code and checks for syntax errors."
+  },
+  {
+    "id": "s2",
+    "qid": "q1",
+    "answer": "It turns source code into executable instructions and may optimize it."
+  },
+  {
+    "id": "s3",
+    "qid": "q2",
+    "answer": "RAM loses data when the computer is turned off while ROM keeps data and is mainly read only."
+  },
+  {
+    "id": "s4",
+    "qid": "q2",
+    "answer": "RAM is faster and temporary; ROM stores firmware permanently."
+  }
+]
