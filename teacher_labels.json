@@ -1,0 +1,6 @@
+[
+  { "student_id": "s1", "qid": "q1", "teacher_mark": 2 },
+  { "student_id": "s2", "qid": "q1", "teacher_mark": 2 },
+  { "student_id": "s3", "qid": "q2", "teacher_mark": 2 },
+  { "student_id": "s4", "qid": "q2", "teacher_mark": 1 }
+]
